@@ -15,8 +15,7 @@
 using namespace std;
 using namespace cv;
 
-Mat src;
-Mat src_gray;
+Mat src, dst;
 int thresh = 100;
 int max_thresh = 255;
 int contrast = 10;
@@ -25,36 +24,40 @@ int brightness = 0;
 int max_brightness = 100;
 RNG rng(12345);
 
-/// Function header
+//Function header
 void setLabel(Mat& im, const string label, vector<Point>& contour);
 static double angle(Point pt1, Point pt2, Point pt0);
 void thresh_callback(int, void*);
 void contrast_callback(int, void*);
 void brightness_callback(int, void*);
 bool hasNearbyBigRect(vector<int> vector_tmp, int index);
-//int MAX_KERNEL_LENGTH = 31;
-
+void overlay(Mat& mat_tmp);
 
 int main(int argc, char* argv[])
 {
+	vector<unsigned char> output;
+	vector<int> para;
+
 	src = imread(argv[1], 1);
+	dst = src.clone();
 
-	// increase contras;
-	src.convertTo(src_gray, -1, 4, -400);
+	//overlay(dst);
 
-	// Convert to grayscale
-	cvtColor(src_gray, src_gray, CV_BGR2GRAY);
-	//blur(src_gray, src_gray, Size(3, 3));
-	medianBlur(src_gray, src_gray, 11);
+	//Increase contrast;
+	src.convertTo(dst, -1, 4, -400);
 
-	/// Create Window
+	//Convert to grayscale
+	cvtColor(dst, dst, CV_BGR2GRAY);
+	medianBlur(dst, dst, 11);
+
+	//Create Window
 	char* source_window = "Source";
 	namedWindow(source_window, CV_WINDOW_AUTOSIZE);
 	imshow(source_window, src);
 
 	char* modified_window = "Modified";
 	namedWindow(modified_window, CV_WINDOW_AUTOSIZE);
-	imshow(modified_window, src_gray);
+	imshow(modified_window, dst);
 
 	createTrackbar(" Canny thresh:", "Source", &thresh, max_thresh, thresh_callback);
 	//createTrackbar(" contrast: ", "Source", &contrast, max_contrast, contrast_callback);
@@ -68,6 +71,21 @@ int main(int argc, char* argv[])
 	return(0);
 }
 
+void overlay(Mat& mat_tmp)
+{
+	Point topleft, bottomright;
+	topleft.x = 0;
+	topleft.y = src.rows * 0.5;
+	bottomright.x = src.cols;
+	bottomright.y = src.rows;
+	Scalar colour(0, 0, 0);
+	float alpha = 0.5;
+
+	Mat overlay = mat_tmp.clone();
+	rectangle(overlay, topleft, bottomright, colour, -1);
+
+	addWeighted(overlay, alpha, mat_tmp, 1 - alpha, 0, mat_tmp);
+}
 
 void contrast_callback(int, void*)
 {
@@ -93,16 +111,15 @@ void brightness_callback(int, void*)
 	imshow("Contours", dst);
 }
 
-/** @function thresh_callback */
 void thresh_callback(int, void*)
 {
 	Mat canny_output;
-	// Find contours
+	//Find contours
 	vector<vector<Point> > contours;
 	vector<Vec4i> hierarchy;
 
-	//Canny(src_gray, canny_output, 0, 50, 5);
-	Canny(src_gray, canny_output, thresh, thresh * 2, 3);
+	//Canny(dst, canny_output, 0, 50, 5);
+	Canny(dst, canny_output, thresh, thresh * 2, 3);
 
 	//findContours(canny_output, contours, CV_RETR_EXTERNAL, CV_CHAIN_APPROX_SIMPLE);
 	findContours(canny_output, contours, hierarchy, CV_RETR_TREE, CV_CHAIN_APPROX_SIMPLE, Point(0, 0));
@@ -117,7 +134,7 @@ void thresh_callback(int, void*)
 	//vector<double> area;
 	vector<int> boundRectArea(contours.size(), 0);
 
-	for (int i = 0; i< contours.size(); i = hierarchy[i][0]) // iterate through each contour.
+	for (int i = 0; i < contours.size(); i = hierarchy[i][0]) //iterate through each contour.
 	{
 		Scalar color = Scalar(rng.uniform(0, 255), rng.uniform(0, 255), rng.uniform(0, 255));
 		//drawContours(dst, contours, i, color, 2, 8, hierarchy, 0, Point());
@@ -133,7 +150,7 @@ void thresh_callback(int, void*)
 		}
 		//else
 		//{
-		//	printf("contours[%d] area: %f\n", i, area);
+			printf("contours[%d] area: %f\n", i, area);
 		//}
 
 		Rect r = boundingRect(contours[i]);
@@ -173,25 +190,27 @@ void thresh_callback(int, void*)
 		}
 	}
 
+	if (!merged_contours.empty())
+	{
+		vector<Point> hull;
+		convexHull((Mat)merged_contours, hull);
+		//Mat hull_points(hull);
+		//RotatedRect r_2 = minAreaRect(hull_points);
 
-	vector<Point> hull;
-	convexHull((Mat)merged_contours, hull);
-	//Mat hull_points(hull);
-	//RotatedRect r_2 = minAreaRect(hull_points);
+		//Point2f vertices[4];
+		//r_2.points(vertices);
 
-	//Point2f vertices[4];
-	//r_2.points(vertices);
+		//for (int i = 0; i < 4; ++i)
+		//{
+		//	line(dst, vertices[i], vertices[(i + 1) % 4],::Scalar(0, 255, 0), 8, CV_AA);
+		//}
 
-	//for (int i = 0; i < 4; ++i)
-	//{
-	//	line(dst, vertices[i], vertices[(i + 1) % 4],::Scalar(0, 255, 0), 8, CV_AA);
-	//}
+		Rect r_2 = boundingRect(hull);
 
-	Rect r_2 = boundingRect(hull);
+		rectangle(dst, Point(r_2.x - 10, r_2.y - 10), Point(r_2.x + r_2.width + 10, r_2.y + r_2.height + 10), Scalar(0, 255, 0), 2, 8, 0); //closed contour
+	}
 
-	rectangle(dst, Point(r_2.x - 10, r_2.y - 10), Point(r_2.x + r_2.width + 10, r_2.y + r_2.height + 10), Scalar(0, 255, 0), 2, 8, 0); //closed contour
-
-	/// Show in a window
+	//Show in a window
 	namedWindow("Contours", CV_WINDOW_AUTOSIZE);
 	imshow("Contours", dst);
 }
