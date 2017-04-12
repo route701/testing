@@ -32,6 +32,7 @@ void contrast_callback(int, void*);
 void brightness_callback(int, void*);
 bool hasNearbyBigRect(vector<int> vector_tmp, int index);
 void overlay(Mat& mat_tmp);
+cv::Mat ResizeButKeepAspectRatio(cv::Mat& img, int target_width, int target_height);
 
 int main(int argc, char* argv[])
 {
@@ -41,6 +42,7 @@ int main(int argc, char* argv[])
 	src = imread(argv[1], 1);
 	dst = src.clone();
 
+	//2017/03/xx try blut bottom half image
 	//overlay(dst);
 
 	//Increase contrast;
@@ -49,6 +51,9 @@ int main(int argc, char* argv[])
 	//Convert to grayscale
 	cvtColor(dst, dst, CV_BGR2GRAY);
 	medianBlur(dst, dst, 11);
+
+	//2017/04/12 try white mat padding
+	//dst = ResizeButKeepAspectRatio(src, 600, 450);	
 
 	//Create Window
 	char* source_window = "Source";
@@ -69,6 +74,38 @@ int main(int argc, char* argv[])
 
 	waitKey(0);
 	return(0);
+}
+
+cv::Mat ResizeButKeepAspectRatio(cv::Mat& img, int target_width, int target_height)
+{
+	cv::Mat outMat = cv::Mat::zeros(target_height, target_width, img.type());
+	outMat.setTo(cv::Scalar(255, 255, 255));
+
+	int width = img.cols, height = img.rows;
+	float ratio = (float)width / (float)height;
+	float target_ratio = (float)target_width / (float)target_height;
+	float scale;
+	cv::Rect roi;
+
+	if (ratio >= target_ratio)
+	{
+		scale = (float)target_width / width;
+		roi.width = target_width;
+		roi.x = 0;
+		roi.height = height * scale;
+		roi.y = (target_height - roi.height) / 2;
+	}
+	else
+	{
+		scale = (float)target_height / height;
+		roi.y = 0;
+		roi.height = target_height;
+		roi.width = width * scale;
+		roi.x = (target_width - roi.width) / 2;
+	}
+
+	cv::resize(img, outMat(roi), roi.size());
+	return outMat;
 }
 
 void overlay(Mat& mat_tmp)
