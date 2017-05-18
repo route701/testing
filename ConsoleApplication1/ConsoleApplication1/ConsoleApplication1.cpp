@@ -33,24 +33,41 @@ void brightness_callback(int, void*);
 bool hasNearbyBigRect(vector<int> vector_tmp, int index);
 void overlay(Mat& mat_tmp);
 cv::Mat ResizeButKeepAspectRatio(cv::Mat& img, int target_width, int target_height);
+void overlayImage(Mat* src, Mat* overlay, const Point& location);
 
 int main(int argc, char* argv[])
 {
 	vector<unsigned char> output;
 	vector<int> para;
 
-	src = imread(argv[1], 1);
-	dst = src.clone();
+	src = imread(argv[1], -1);
 
+	Mat src2 = imread(argv[2], -1);
+
+	//dst = src.clone();
+
+	//2017/05/18 add alpha channel to original image and overlay an image
+	{
+		vector<Mat> matChannels;
+		split(src, matChannels);
+
+		Mat src_alpha = matChannels.at(0) + matChannels.at(1) + matChannels.at(2);
+		matChannels.push_back(src_alpha);
+
+		merge(matChannels, dst);
+
+		overlayImage(&dst, &src2, Point());
+	}
+	
 	//2017/03/xx try blut bottom half image
 	//overlay(dst);
 
 	//Increase contrast;
-	src.convertTo(dst, -1, 4, -400);
+	//src.convertTo(dst, -1, 4, -400);
 
 	//Convert to grayscale
-	cvtColor(dst, dst, CV_BGR2GRAY);
-	medianBlur(dst, dst, 11);
+	//cvtColor(dst, dst, CV_BGR2GRAY);
+	//medianBlur(dst, dst, 11);
 
 	//2017/04/12 try white mat padding
 	//dst = ResizeButKeepAspectRatio(src, 600, 450);	
@@ -64,16 +81,45 @@ int main(int argc, char* argv[])
 	namedWindow(modified_window, CV_WINDOW_AUTOSIZE);
 	imshow(modified_window, dst);
 
-	createTrackbar(" Canny thresh:", "Source", &thresh, max_thresh, thresh_callback);
+	//createTrackbar(" Canny thresh:", "Source", &thresh, max_thresh, thresh_callback);
 	//createTrackbar(" contrast: ", "Source", &contrast, max_contrast, contrast_callback);
 	//createTrackbar(" brightness: ", "Source", &brightness, max_brightness, brightness_callback);
 
-	thresh_callback(0, 0);
+	//thresh_callback(0, 0);
 	//contrast_callback(0, 0);
 	//brightness_callback(0, 0);
 
 	waitKey(0);
 	return(0);
+}
+
+void overlayImage(Mat* src, Mat* overlay, const Point& location)
+{
+	for (int y = max(location.y, 0); y < src->rows; ++y)
+	{
+		int fY = y - location.y;
+
+		if (fY >= overlay->rows)
+			break;
+
+		for (int x = max(location.x, 0); x < src->cols; ++x)
+		{
+			int fX = x - location.x;
+
+			if (fX >= overlay->cols)
+				break;
+
+			// determine the opacity of the overlay pixel, using its fourth (alpha) channel.
+			double opacity = ((double)overlay->data[fY * overlay->step + fX * overlay->channels() + 3]) / 255;
+
+			for (int c = 0; opacity > 0 && c < src->channels(); ++c)
+			{
+				unsigned char overlayPx = overlay->data[fY * overlay->step + fX * overlay->channels() + c];
+				unsigned char srcPx = src->data[y * src->step + x * src->channels() + c];
+				src->data[y * src->step + src->channels() * x + c] = srcPx * (1. - opacity) + overlayPx * opacity;
+			}
+		}
+	}
 }
 
 cv::Mat ResizeButKeepAspectRatio(cv::Mat& img, int target_width, int target_height)
