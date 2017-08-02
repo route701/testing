@@ -1,16 +1,17 @@
 #include "stdafx.h"
 #include <windows.h>
 #include <Shlobj.h>
-//#include <iostream.h>
 #include <stdlib.h>
 #include <string>
 #include <vector>
 #include <conio.h>
-//shape-detect
-#include <opencv2/highgui/highgui.hpp>
-#include <opencv2/imgproc/imgproc.hpp>
 #include <cmath>
 #include <iostream>
+// shape-detect
+#include <opencv2/highgui/highgui.hpp>
+#include <opencv2/imgproc/imgproc.hpp>
+// cv
+//#include <opencv/cv.h>
 
 using namespace std;
 using namespace cv;
@@ -24,7 +25,7 @@ int brightness = 0;
 int max_brightness = 100;
 RNG rng(12345);
 
-//Function header
+// Function header
 void setLabel(Mat& im, const string label, vector<Point>& contour);
 static double angle(Point pt1, Point pt2, Point pt0);
 void thresh_callback(int, void*);
@@ -34,52 +35,81 @@ bool hasNearbyBigRect(vector<int> vector_tmp, int index);
 void overlay(Mat& mat_tmp);
 cv::Mat ResizeButKeepAspectRatio(cv::Mat& img, int target_width, int target_height);
 void overlayImage(Mat* src, Mat* overlay, const Point& location);
+float CheckTamperScore(cv::Mat frame);
+void DetectColorImage(cv::Mat frame);
+//void ChangeColorSapce(IplImage* Ipl);
+void ChangeColorSapce(cv::Mat frame);
+float GetGrayScore(cv::Mat img, cv::Rect roi);
 
 int main(int argc, char* argv[])
 {
+	if (argc < 2) return -1;
+
 	vector<unsigned char> output;
 	vector<int> para;
 
+	char* filename = argv[1];
 	src = imread(argv[1], -1);
 
-	Mat src2 = imread(argv[2], -1);
+	//Mat src2 = imread(argv[2], -1);
 
-	//dst = src.clone();
+	dst = src.clone();
+	Mat blur;
 
-	//2017/05/18 add alpha channel to original image and overlay an image
-	{
-		vector<Mat> matChannels;
-		split(src, matChannels);
+	// 18/05/2017 add alpha channel to original image and overlay an image
+	//{
+	//	vector<Mat> matChannels;
+	//	split(src, matChannels);
 
-		Mat src_alpha = matChannels.at(0) + matChannels.at(1) + matChannels.at(2);
-		matChannels.push_back(src_alpha);
+	//	Mat src_alpha = matChannels.at(0) + matChannels.at(1) + matChannels.at(2);
+	//	matChannels.push_back(src_alpha);
 
-		merge(matChannels, dst);
+	//	merge(matChannels, dst);
 
-		overlayImage(&dst, &src2, Point());
-	}
-	
-	//2017/03/xx try blut bottom half image
+	//	overlayImage(&dst, &src2, Point(0, -800));
+	//}
+
+	// 25/03/2017 try blut bottom half image
 	//overlay(dst);
 
-	//Increase contrast;
+	// Increase contrast;
 	//src.convertTo(dst, -1, 4, -400);
 
-	//Convert to grayscale
+	// Convert to grayscale
 	//cvtColor(dst, dst, CV_BGR2GRAY);
-	//medianBlur(dst, dst, 11);
 
-	//2017/04/12 try white mat padding
+	//medianBlur(dst, dst, 11);
+	//GaussianBlur(dst, blur, cv::Size(31, 31), 0);
+
+	// 12/04/2017 try white mat padding
 	//dst = ResizeButKeepAspectRatio(src, 600, 450);	
 
-	//Create Window
-	char* source_window = "Source";
-	namedWindow(source_window, CV_WINDOW_AUTOSIZE);
-	imshow(source_window, src);
+	// Create Window srouce
+	//char* source_window = "Source";
+	//namedWindow(source_window, CV_WINDOW_AUTOSIZE);
+	//imshow(source_window, src);
 
-	char* modified_window = "Modified";
-	namedWindow(modified_window, CV_WINDOW_AUTOSIZE);
-	imshow(modified_window, dst);
+	// Create Window grey
+	//char* modified_window = "grey";
+	//namedWindow(modified_window, CV_WINDOW_AUTOSIZE);
+	//imshow(modified_window, dst);
+
+	// Create Window blur
+	//char* modified_window_2 = "blur";
+	//namedWindow(modified_window_2, CV_WINDOW_AUTOSIZE);
+	//imshow(modified_window_2, blur);
+
+	//31/07/2017
+	CheckTamperScore(src);
+	cout << endl;
+	cout << "source" << endl;
+	DetectColorImage(src);
+	cout << endl;
+
+	//01/08/2017
+	//IplImage * Ipl = cvLoadImage(argv[1]);
+	//ChangeColorSapce(Ipl);
+	ChangeColorSapce(src);
 
 	//createTrackbar(" Canny thresh:", "Source", &thresh, max_thresh, thresh_callback);
 	//createTrackbar(" contrast: ", "Source", &contrast, max_contrast, contrast_callback);
@@ -89,8 +119,157 @@ int main(int argc, char* argv[])
 	//contrast_callback(0, 0);
 	//brightness_callback(0, 0);
 
+	if (src.data)
+	{
+		cv::Rect head = cv::Rect(0, 0, 1000, 1000);
+		std::cout << filename << endl << "gray score: " << GetGrayScore(src, head) << std::endl;
+		//cv::imshow(filename, src);
+		//cv::waitKey();
+	}
+
 	waitKey(0);
 	return(0);
+
+}
+
+float GetGrayScore(cv::Mat img, cv::Rect roi)
+{
+	cv::Mat thumb;
+	cv::Rect rect = roi & cv::Rect(0, 0, img.cols, img.rows);
+	cv::resize(img(rect), thumb, cv::Size(50, 50), 0.0, 0.0, cv::INTER_NEAREST);
+
+	std::vector<cv::Mat> yuv;
+	cv::cvtColor(thumb, thumb, cv::COLOR_RGB2YUV);
+	cv::split(thumb, yuv);
+
+	const float lambda = 0.4f;
+	cout << "U: " << cv::mean(yuv[1])[0] << endl;
+	cout << "V: " << cv::mean(yuv[2])[0] << endl;
+
+	float exp1 = exp(lambda * cv::mean(yuv[1])[0]);
+	cout << "exp1: " << exp1 << endl;
+	
+	float exp2 = exp(lambda * cv::mean(yuv[2])[0]);
+	cout << "exp2: " << exp2 << endl;
+
+	float score = exp1 / (exp1 + exp2);
+	return score;
+}
+
+void ChangeColorSapce(cv::Mat frame)
+{
+	cv::Mat hsv, yuv, lab, test;
+
+	//cvtColor(frame, hsv, CV_BGR2HSV);
+	cvtColor(frame, yuv, CV_BGR2YCrCb);
+	//cvtColor(frame, lab, CV_BGR2Lab);
+
+	namedWindow("Source-RGB", 0);
+	imshow("Source-RGB", frame);
+	//namedWindow("HSV", 0);
+	//imshow("HSV", hsv);
+	namedWindow("YUV", 0);
+	imshow("YUV", yuv);
+	//namedWindow("Lab", 0);
+	//imshow("Lab", lab);
+
+	//cvtColor(lab, test, CV_Lab2RGB);
+	//namedWindow("test", 0);
+	//imshow("test", test);
+
+	//imwrite("HSV.jpg", hsv);
+	imwrite("YUV.jpg", yuv);
+	//imwrite("Lab.jpg", lab);
+	//imwrite("test.jpg", test);
+
+	cout << "yuv" << endl;
+	DetectColorImage(yuv);
+}
+
+//float CheckTamperScore(std::vector<unsigned char> &image)
+float CheckTamperScore(cv::Mat frame)
+{
+	//cv::Mat frame = cv::imdecode(image, CV_LOAD_IMAGE_COLOR);
+	cv::Mat gray, blur, err;
+	cv::Scalar mean, stddev;
+	cv::cvtColor(frame, gray, CV_BGR2GRAY);
+	cv::GaussianBlur(gray, blur, cv::Size(31, 31), 0);
+	cv::absdiff(gray, blur, err);
+	cv::meanStdDev(err, mean, stddev);
+
+	cout << "mean: " << mean[0] << endl;
+	cout << "stddev: " << stddev[0] << endl;
+	return stddev[0];
+}
+
+void DetectColorImage(cv::Mat frame)
+{
+	if (frame.channels() > 1)
+	{
+		cv::Mat dst, bgr[3];
+		cv::Scalar mean, stddev;
+
+		cv::split(frame, bgr);
+
+		//cout << "bgr[0]: " << bgr[0] << "bgr[1]: " << bgr[1] << "bgr[2]: " << bgr[2] << endl;
+
+		cv::absdiff(bgr[0], bgr[1], dst);
+		
+		{
+			cv::meanStdDev(dst, mean, stddev);
+			cout << "mean 1: " << mean[0] << endl;
+			cout << "stddev 1: " << stddev[0] << endl;
+		}
+
+		if (cv::countNonZero(dst))
+		{
+			cout << "not same 1" << endl;
+		}
+		else
+		{
+			cout << "same 1" << endl;
+		}
+
+		cout << endl;
+		cv::absdiff(bgr[0], bgr[2], dst);
+
+		{
+			cv::meanStdDev(dst, mean, stddev);
+			cout << "mean 2: " << mean[0] << endl;
+			cout << "stddev 2: " << stddev[0] << endl;
+		}
+
+		if (cv::countNonZero(dst))
+		{
+			cout << "not same 2" << endl;
+		}
+		else
+		{
+			cout << "same 2" << endl;
+		}
+		
+		cout << endl;
+		cv::absdiff(bgr[1], bgr[2], dst);
+
+		{
+			cv::meanStdDev(dst, mean, stddev);
+			cout << "mean 3: " << mean[0] << endl;
+			cout << "stddev 3: " << stddev[0] << endl;
+		}
+
+		if (cv::countNonZero(dst))
+		{
+			cout << "not same 3" << endl;
+		}
+		else
+		{
+			cout << "same 3" << endl;
+		}
+	}
+	else
+	{
+		cout << "1 channel only" << endl;
+	}
 }
 
 void overlayImage(Mat* src, Mat* overlay, const Point& location)
@@ -197,7 +376,7 @@ void brightness_callback(int, void*)
 void thresh_callback(int, void*)
 {
 	Mat canny_output;
-	//Find contours
+	// Find contours
 	vector<vector<Point> > contours;
 	vector<Vec4i> hierarchy;
 
@@ -217,12 +396,13 @@ void thresh_callback(int, void*)
 	//vector<double> area;
 	vector<int> boundRectArea(contours.size(), 0);
 
-	for (int i = 0; i < contours.size(); i = hierarchy[i][0]) //iterate through each contour.
+	// iterate through each contour.
+	for (int i = 0; i < contours.size(); i = hierarchy[i][0])
 	{
 		Scalar color = Scalar(rng.uniform(0, 255), rng.uniform(0, 255), rng.uniform(0, 255));
 		//drawContours(dst, contours, i, color, 2, 8, hierarchy, 0, Point());
 
-		//Skip small or non-convex objects 
+		// Skip small or non-convex objects 
 		double area = fabs(contourArea(contours[i]));
 		//area[i] = fabs(contourArea(contours[i]));
 
@@ -244,7 +424,8 @@ void thresh_callback(int, void*)
 
 		if (r.area() > 20000)
 		{
-			if (hierarchy[i][2] < 0) //Check if there is a child contour
+			// Check if there is a child contour
+			if (hierarchy[i][2] < 0)
 			{
 				printf("contours[%d] is an opened contour!\n", i);
 				rectangle(dst, Point(r.x - 10, r.y - 10), Point(r.x + r.width + 10, r.y + r.height + 10), Scalar(0, 0, 255), 2, 8, 0); //Opened contour
@@ -293,7 +474,7 @@ void thresh_callback(int, void*)
 		rectangle(dst, Point(r_2.x - 10, r_2.y - 10), Point(r_2.x + r_2.width + 10, r_2.y + r_2.height + 10), Scalar(0, 255, 0), 2, 8, 0); //closed contour
 	}
 
-	//Show in a window
+	// Show in a window
 	namedWindow("Contours", CV_WINDOW_AUTOSIZE);
 	imshow("Contours", dst);
 }
