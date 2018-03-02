@@ -17,7 +17,8 @@ using namespace cv;
 Mat src;
 
 // Function header
-float GetGrayScore(cv::Mat img, cv::Rect roi);
+float GetGrayScoreByYUV(cv::Mat img, cv::Rect roi);
+float GetGrayScoreByHSV(cv::Mat img, cv::Rect roi);
 cv::Rect convertTagRect2CVRect(int left, int top, int right, int bottom);
 
 int main(int argc, char* argv[])
@@ -48,7 +49,8 @@ int main(int argc, char* argv[])
 		//std::cout << filename << ": " << GetGrayScore(src, head) << std::endl;
 		std::cout << filename << std::endl;
 
-		GetGrayScore(src, head);
+		GetGrayScoreByYUV(src, head);
+		GetGrayScoreByHSV(src, head);
 		//cv::imshow(filename, src);
 		cv::waitKey();
 	}
@@ -56,7 +58,7 @@ int main(int argc, char* argv[])
 	return 0;
 }
 
-float GetGrayScore(cv::Mat img, cv::Rect roi)
+float GetGrayScoreByYUV(cv::Mat img, cv::Rect roi)
 {
 	cv::Mat thumb;
 	cv::Rect rect = roi & cv::Rect(0, 0, img.cols, img.rows);
@@ -77,6 +79,25 @@ float GetGrayScore(cv::Mat img, cv::Rect roi)
 	cout << "exp2: " << exp2 << endl;
 
 	float score = exp1 / (exp1 + exp2);
+	cout << "score: " << score << endl;
+	return score;
+}
+
+float GetGrayScoreByHSV(cv::Mat img, cv::Rect roi)
+{
+	cv::Mat thumb, hsv;
+	cv::Rect rect = roi & cv::Rect(0, 0, img.cols, img.rows);
+	cv::resize(img(rect), thumb, cv::Size(50, 50), 0.0, 0.0, cv::INTER_NEAREST);
+
+	std::vector<cv::Mat> hsv_s;
+	cv::cvtColor(thumb, hsv, cv::COLOR_RGB2HSV);
+	cv::split(hsv, hsv_s);
+
+	float var = cv::mean(hsv_s[0])[0];
+	cout << "HSV mean: " << var << endl;
+	float exp1 = exp((74.0f - var) / 22.0f);
+	cout << "exp1: " << exp1 << endl;
+	float score = exp1 / (1 + exp1);
 	cout << "score: " << score << endl;
 	return score;
 }
